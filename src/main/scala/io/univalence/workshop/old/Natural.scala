@@ -1,4 +1,4 @@
-package io.univalence.workshop
+package io.univalence.workshop.old
 
 import scala.annotation.tailrec
 
