@@ -28,11 +28,11 @@ object Effect {
     @tailrec
     def unsafeRun[A](e: Effect[A]): A = e match {
         case Run(process) => process()
-        //
-        case FlatMap(e1: Effect[Any], f: (Any => A)) =>
+//        case FlatMap(e1: Effect[Any], f: (Any => Effect[A])) => unsafeRun(f(unsafeRun(e1)))
+        case FlatMap(e1: Effect[Any], f: (Any => Effect[A])) =>
           e1 match {
             case Run(process1) => unsafeRun(f(process1()))
-            case FlatMap(e2, g: (Any => Any)) =>
+            case FlatMap(e2, g: (Any => Effect[Any])) =>
               // FlatMap(FlatMap(e2, g), f)
               // => associativity
               // FlatMap(e2, x => FlatMap(g(x), f))
@@ -55,10 +55,13 @@ object Effect {
       for {
         _    <- value
         _    <- value
+//        _    <- Run[Unit] { throw new RuntimeException("WAAZAAAAAAAA") }
         date <- localNow
         _    <- putStrLn(date.toString)
 //        _    <- program
       } yield ()
+
+    println(program)
 
     unsafeRun(program)
   }
