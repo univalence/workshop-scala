@@ -1,12 +1,14 @@
 package io.univalence.workshop.database
 
 import io.univalence.workshop.database.Stock.StockCodec
+import java.io.File
 import java.nio.ByteBuffer
-import java.nio.channels.SeekableByteChannel
+import java.nio.channels.{Channels, SeekableByteChannel}
 import java.nio.charset.StandardCharsets
+import java.nio.file.{Files, OpenOption, Paths, StandardOpenOption}
 import java.time.Instant
 import java.util.concurrent.ConcurrentSkipListMap
-import scala.util.Try
+import scala.util.{Try, Using}
 
 object keyvaluestore {
 
@@ -77,9 +79,43 @@ object keyvaluestore {
         f"$n%04d" + data
       }
 
+      def encode(record: Record, channel: SeekableByteChannel): Unit = {
+        val data = encode(record)
+        val buffer = ByteBuffer.wrap(data.getBytes(StandardCharsets.UTF_8))
+        channel.write(buffer)
+      }
+
       def decode(channel: SeekableByteChannel): Record = {
         val dataSizeBuffer = ByteBuffer.allocate(4)
         val bytes = channel.read(dataSizeBuffer)
+        dataSizeBuffer.rewind()
+
+        val dataSize = new String(dataSizeBuffer.array(), StandardCharsets.UTF_8).toInt
+        val buffer = ByteBuffer.allocate(dataSize)
+        channel.read(buffer)
+        buffer.rewind()
+
+        val data = new String(buffer.array(), StandardCharsets.UTF_8).substring(2)
+        val keySizeSize = data.indexOf("|")
+        val keySize = data.substring(0,keySizeSize).toInt
+        val data2 = data.substring(keySizeSize + 1)
+        val keyString = data2.substring(0, keySize)
+        val key = keyCodec.decode(keyString, 0)
+
+        val data3 = data2.substring(keySize + 1)
+        val data3bis = data3.substring(0, data3.indexOf("|"))
+        val timestamp = Instant.ofEpochMilli(data3bis.toLong)
+
+        val data4 = data3.substring(data3.indexOf("|"))
+
+        val value = valueCodec.decode(data4, 1)
+
+
+        Record(
+          key = key,
+          timestamp = timestamp,
+          value = value
+        )
       }
     }
   }
@@ -114,6 +150,21 @@ object keyvaluestore {
 
     println(keyCodec.decode(keyCodec.encode(key), 0))
     println(valueCodec.decode(valueCodec.encode(value), 0))
+
+    val filename = "data/pantoufle.db"
+    val fileKVStore = new FileKVStore[StockKey, Stock](filename, keyCodec, valueCodec)
+    val record = fileKVStore.Record(key, Instant.now(), value)
+    println(record)
+    println(fileKVStore.Record.encode(record))
+
+    val path = Paths.get(filename)
+    if (!path.getParent.toFile.exists()) Files.createDirectories(path.getParent)
+    if (!Files.exists(path)) Files.createFile(path)
+    Using(Files.newByteChannel(path, StandardOpenOption.READ)) { channel =>
+//    Using(Files.newByteChannel(path, StandardOpenOption.APPEND)) { channel =>
+//      fileKVStore.Record.encode(record, channel)
+      println(fileKVStore.Record.decode(channel))
+    }.get
   }
 
 }
