@@ -1,14 +1,18 @@
 (ns sudoku)
 
+
 (do :queue
 
-    (defn queue [& xs]
-      (reduce conj clojure.lang.PersistentQueue/EMPTY xs))
+    "a queue that do not accept elements that are already in it"
 
     (defn qonj [q x]
-      (if-not ((set q) x)
+      (if-not (contains? (set q) x)
         (conj q x)
         q))
+
+    (defn queue [& xs]
+      (assert (= (count xs) (count (set xs))))
+      (reduce conj clojure.lang.PersistentQueue/EMPTY xs))
 
     (defn qoncat [q xs]
       (reduce qonj q xs))
@@ -17,7 +21,7 @@
       (when-not (empty? q)
         ((juxt peek pop) q)))
 
-    (defmethod print-method clojure.lang.PersistentQueue [q ^java.io.Writer w]
+    (defmethod print-method clojure.lang.PersistentQueue [q w]
       (print-method (cons 'queue (seq q)) w)))
 
 (do :sudoku
@@ -26,7 +30,7 @@
       (vec (repeat 9 (vec (repeat 9 '_)))))
 
     (defn square-positions
-      "return the sequence of positions contained in the 3*3 square constining the given position"
+      "return the sequence of positions contained in the 3*3 square constaining the given position"
       [[x y]]
       (for [x (take 3 (iterate inc (* (quot x 3) 3)))
             y (take 3 (iterate inc (* (quot y 3) 3)))]
@@ -36,8 +40,11 @@
       (reduce (fn [cs [x y :as pos]]
                 (into cs
                       (concat
+                        ;; column
                         (map (fn [n] [:!= #{pos [n (pos 1)]}]) (remove (partial = x) (range 9)))
+                        ;; row
                         (map (fn [n] [:!= #{pos [(pos 0) n]}]) (remove (partial = y) (range 9)))
+                        ;; square
                         (map (fn [pos2] [:!= #{pos pos2}]) (remove (partial = pos) (square-positions pos))))))
               #{}
               (for [x (range 9)
@@ -90,6 +97,7 @@
 
     (defn run-constraint
       [state [verb args :as constraint]]
+      ;; for now we have only one type of constraint (disequality)
       (case verb
         :!= (let [[pos1 pos2] (seq args)
                   dom1 (get-domain state pos1)
@@ -112,7 +120,6 @@
               runnable-constraints (filter (fn [[_ args]]
                                              (contains? (set args) pos))
                                            constraints)]
-          (println runnable-constraints)
           (reduce run-constraint
                   (assoc state :queue next-queue)
                   runnable-constraints))))
@@ -140,4 +147,16 @@
 
     (-> (grid->state grid)
         step-rec
-        state->grid))
+        state->grid)
+
+    ;; result :
+    
+    [[1 3 6 5 2 8 9 7 4]
+     [9 4 5 1 7 3 2 8 6]
+     [8 2 7 6 4 9 3 1 5]
+     [3 9 1 4 6 7 5 2 8]
+     [4 6 2 3 8 5 7 9 1]
+     [5 7 8 9 1 2 6 4 3]
+     [7 1 9 8 3 6 4 5 2]
+     [2 8 3 7 5 4 1 6 9]
+     [6 5 4 2 9 1 8 3 7]])
